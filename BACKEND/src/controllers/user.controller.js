@@ -83,6 +83,8 @@ const updatePracticant = async (req, res) => {
         if (req.userRole !== 'ADMIN') {
             delete updateData.role;
             delete updateData.dni; // El DNI es su usuario, mejor no permitir que se lo cambien ellos mismos por seguridad
+            delete updateData.startDate;
+            delete updateData.endDate;
         }
 
         await user.update(updateData);

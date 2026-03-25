@@ -6,6 +6,10 @@ import { useNavigate } from 'react-router-dom';
 const Login = ({ setUser }) => {
     const [userType, setUserType] = useState('practicant'); // 'practicant' | 'admin'
     const [formData, setFormData] = useState({ dni: '', password: '', username: '' });
+    const [showForgotModal, setShowForgotModal] = useState(false);
+    const [forgotData, setForgotData] = useState({ identifier: '' });
+    const [forgotStatus, setForgotStatus] = useState(null);
+    const [forgotMessage, setForgotMessage] = useState('');
     const navigate = useNavigate();
 
     const handleLogin = async (e) => {
@@ -33,6 +37,37 @@ const Login = ({ setUser }) => {
             // Mostrar mensaje real del servidor o error genérico
             const msg = error.response?.data?.message || 'Error al conectar con el servidor. Verifica que esté encendido y la base de datos conectada.';
             alert(msg);
+        }
+    };
+
+    const handleForgotPassword = async (e) => {
+        e.preventDefault();
+        if (!forgotData.identifier) {
+            alert('Por favor, ingrese su DNI o Usuario.');
+            return;
+        }
+        
+        setForgotStatus('loading');
+        setForgotMessage('Procesando solicitud...');
+        
+        try {
+            const response = await axios.post('http://localhost:3000/api/auth/forgot-password', {
+                dni: forgotData.identifier
+            });
+            setForgotStatus('success');
+            setForgotMessage(response.data.message || 'Contraseña restablecida correctamente.');
+            
+            // Cerrar el modal automáticamente después de 4 segundos para que pruebe al login
+            setTimeout(() => {
+                setShowForgotModal(false);
+                setForgotStatus(null);
+                setForgotMessage('');
+                setForgotData({ identifier: '' });
+            }, 4000);
+
+        } catch (error) {
+            setForgotStatus('error');
+            setForgotMessage(error.response?.data?.message || 'Error al procesar la solicitud. Verifique que el usuario existe.');
         }
     };
 
@@ -108,6 +143,16 @@ const Login = ({ setUser }) => {
                     <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
                         Ingresar
                     </button>
+
+                    <div style={{ textAlign: 'center', marginTop: '15px' }}>
+                        <a 
+                            href="#" 
+                            onClick={(e) => { e.preventDefault(); setShowForgotModal(true); setForgotStatus(null); setForgotMessage(''); }} 
+                            style={{ color: '#0056b3', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '500' }}
+                        >
+                            ¿Recuperar contraseña?
+                        </a>
+                    </div>
                 </form>
 
                 <div className="terminal-link-container" style={{ marginTop: '20px', textAlign: 'center', borderTop: '1px solid #eee', paddingTop: '15px' }}>
@@ -134,6 +179,57 @@ const Login = ({ setUser }) => {
                     </button>
                 </div>
             </div>
+
+            {/* Forgot Password Modal */}
+            {showForgotModal && (
+                <div className="modal active" style={{ display: 'flex', position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, justifyContent: 'center', alignItems: 'center' }}>
+                    <div className="modal-content" style={{ background: 'white', padding: '30px', borderRadius: '15px', width: '90%', maxWidth: '400px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+                        <h3 style={{ marginBottom: '15px', color: '#333' }}>Recuperar Contraseña</h3>
+                        <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '20px' }}>
+                            Ingrese su DNI (practicantes) o Usuario (administradores). Su contraseña será **restablecida automáticamente** a su número de identificación.
+                        </p>
+                        
+                        <form onSubmit={handleForgotPassword}>
+                            <div className="form-group" style={{ marginBottom: '20px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>DNI / Usuario</label>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    placeholder="Ingrese su identificación"
+                                    value={forgotData.identifier}
+                                    onChange={(e) => setForgotData({ identifier: e.target.value })}
+                                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd' }}
+                                    required
+                                />
+                            </div>
+                            
+                            {forgotMessage && (
+                                <div style={{ 
+                                    padding: '10px', 
+                                    marginBottom: '20px', 
+                                    borderRadius: '8px', 
+                                    fontSize: '0.9rem',
+                                    backgroundColor: forgotStatus === 'success' ? '#d4edda' : forgotStatus === 'error' ? '#f8d7da' : '#e2e3e5',
+                                    color: forgotStatus === 'success' ? '#155724' : forgotStatus === 'error' ? '#721c24' : '#383d41'
+                                }}>
+                                    {forgotMessage}
+                                </div>
+                            )}
+
+                            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                                <button type="button" onClick={() => setShowForgotModal(false)} className="btn btn-danger" style={{ padding: '8px 15px', borderRadius: '8px', border: 'none', background: '#dc3545', color: 'white', cursor: 'pointer' }}>
+                                    {forgotStatus === 'success' ? 'Cerrar' : 'Cancelar'}
+                                </button>
+                                {forgotStatus !== 'success' && (
+                                    <button type="submit" className="btn btn-primary" disabled={forgotStatus === 'loading'} style={{ padding: '8px 15px', borderRadius: '8px', border: 'none', background: '#0056b3', color: 'white', cursor: 'pointer' }}>
+                                        {forgotStatus === 'loading' ? 'Procesando...' : 'Aceptar'}
+                                    </button>
+                                )}
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

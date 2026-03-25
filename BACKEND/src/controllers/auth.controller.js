@@ -40,4 +40,40 @@ const login = async (req, res) => {
     }
 };
 
-module.exports = { login };
+const forgotPassword = async (req, res) => {
+    try {
+        const { dni } = req.body;
+        
+        // Find user by DNI (for practicants) or username (for admins)
+        let user = await User.findOne({ where: { dni } });
+        let newPassword = dni;
+
+        if (!user) {
+            user = await User.findOne({ where: { username: dni } });
+            newPassword = dni; // Para administradores será su mismo usuario
+        }
+
+        if (!user) {
+            return res.status(404).json({ message: 'Usuario no encontrado. Asegúrese de ingresar correctamente su DNI o Usuario.' });
+        }
+
+        if (user.role === 'ADMIN') {
+            return res.status(403).json({ message: 'Por razones de seguridad, los administradores no pueden restablecer su contraseña automáticamente. Contacte a soporte o al encargado del sistema.' });
+        }
+
+        // Restablecer la contraseña al DNI
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        // Update user
+        await user.update({ password: hashedPassword });
+
+        res.json({ message: `Su contraseña ha sido restablecida exitosamente. Su nueva contraseña es su ${user.role === 'ADMIN' ? 'Usuario (' + newPassword + ')' : 'DNI (' + newPassword + ')'}. Ya puede iniciar sesión.` });
+
+    } catch (error) {
+        console.error("Forgot password error:", error);
+        res.status(500).json({ message: 'Error interno en el servidor.' });
+    }
+};
+
+module.exports = { login, forgotPassword };

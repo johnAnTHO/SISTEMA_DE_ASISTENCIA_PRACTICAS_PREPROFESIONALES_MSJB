@@ -230,17 +230,21 @@ const EditProfileModal = ({ user, onClose, onSave }) => {
                         <div className="form-row">
                             <div className="form-group">
                                 <label>Fecha Inicio</label>
-                                <input type="date" className="form-control" name="startDate" value={formData.startDate || ''} onChange={handleChange} />
+                                <input type="date" className="form-control" name="startDate" value={formData.startDate || ''} readOnly disabled title="No puedes modificar tu fecha de inicio" style={{ backgroundColor: '#e9ecef', cursor: 'not-allowed' }} />
                             </div>
                             <div className="form-group">
                                 <label>Fecha Fin</label>
-                                <input type="date" className="form-control" name="endDate" value={formData.endDate || ''} onChange={handleChange} />
+                                <input type="date" className="form-control" name="endDate" value={formData.endDate || ''} readOnly disabled title="No puedes modificar tu fecha de fin" style={{ backgroundColor: '#e9ecef', cursor: 'not-allowed' }} />
                             </div>
                         </div>
                         <div className="form-row">
                             <div className="form-group">
                                 <label>Teléfono</label>
                                 <input type="text" className="form-control" name="phone" value={formData.phone || ''} onChange={handleChange} />
+                            </div>
+                            <div className="form-group">
+                                <label>Correo Electrónico</label>
+                                <input type="email" className="form-control" name="email" value={formData.email || ''} onChange={handleChange} placeholder="Para recuperar contraseña" />
                             </div>
                         </div>
 
@@ -465,6 +469,7 @@ const ProfileView = ({ user, onEdit }) => (
                         <div className="info-card">
                             <div className="info-card-header"><Phone size={18} /> Contacto</div>
                             <p><strong>Teléfono:</strong> {user.phone || 'No registrado'}</p>
+                            <p><strong>Correo:</strong> {user.email || 'No registrado'}</p>
                         </div>
 
                         <div className="info-card">

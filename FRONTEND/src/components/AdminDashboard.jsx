@@ -911,7 +911,18 @@ const EditAdminProfileModal = ({ user, onClose, onSave }) => {
                             </div>
                         </div>
 
-                        <div className="form-group">
+                        <div className="form-row">
+                            <div className="form-group">
+                                <label>Usuario de Acceso</label>
+                                <input type="text" className="form-control" name="username" value={formData.username || ''} onChange={handleChange} required title="Este es el usuario con el que inicia sesión" />
+                            </div>
+                            <div className="form-group">
+                                <label style={{ color: 'var(--primary)', fontWeight: 'bold' }}>Nueva Contraseña (Opcional)</label>
+                                <input type="password" className="form-control" name="password" value={formData.password || ''} onChange={handleChange} placeholder="Dejar en blanco para no cambiarla" />
+                            </div>
+                        </div>
+
+                        <div className="form-group" style={{ marginTop: '15px' }}>
                             <label>Nombres Completos</label>
                             <input type="text" className="form-control" name="names" value={formData.names || ''} onChange={handleChange} required />
                         </div>
