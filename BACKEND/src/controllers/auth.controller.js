@@ -3,10 +3,73 @@ const User = db.users;
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
+// ──────────────────────────────────────────────
+//  Configuración de bloqueo por intentos fallidos
+// ──────────────────────────────────────────────
+const MAX_ATTEMPTS   = 8;          // intentos máximos antes del bloqueo
+const LOCK_DURATION  = 15 * 60 * 1000; // 15 minutos en milisegundos
+
+// Mapa en memoria: clave -> { attempts, lockedUntil }
+// Clave: "practicant:<dni>" | "admin:<username>"
+const loginAttempts = new Map();
+
+/**
+ * Devuelve el estado actual de intentos para una clave dada.
+ * Si el bloqueo ya expiró lo limpia automáticamente.
+ */
+function getAttemptRecord(key) {
+    const record = loginAttempts.get(key) || { attempts: 0, lockedUntil: null };
+    // Si había bloqueo y ya expiró, reiniciar
+    if (record.lockedUntil && Date.now() > record.lockedUntil) {
+        const reset = { attempts: 0, lockedUntil: null };
+        loginAttempts.set(key, reset);
+        return reset;
+    }
+    return record;
+}
+
+/** Registra un intento fallido y aplica bloqueo si se superó el límite. */
+function registerFailedAttempt(key) {
+    const record = getAttemptRecord(key);
+    record.attempts += 1;
+    if (record.attempts >= MAX_ATTEMPTS) {
+        record.lockedUntil = Date.now() + LOCK_DURATION;
+    }
+    loginAttempts.set(key, record);
+    return record;
+}
+
+/** Limpia el registro al loguearse correctamente. */
+function clearAttempts(key) {
+    loginAttempts.delete(key);
+}
+
+// ──────────────────────────────────────────────
+//  Controladores
+// ──────────────────────────────────────────────
+
 const login = async (req, res) => {
     try {
         const { dni, username, password, type } = req.body;
 
+        // Determinar clave de bloqueo según tipo de usuario
+        const identifier = type === 'practicant' ? dni : username;
+        const lockKey    = `${type}:${identifier}`;
+
+        // ── Verificar si está bloqueado ──
+        const record = getAttemptRecord(lockKey);
+        if (record.lockedUntil) {
+            const remainingMs  = record.lockedUntil - Date.now();
+            const remainingMin = Math.ceil(remainingMs / 60000);
+            return res.status(429).json({
+                message: `Cuenta bloqueada temporalmente por demasiados intentos fallidos. Inténtelo de nuevo en ${remainingMin} minuto${remainingMin !== 1 ? 's' : ''}.`,
+                locked: true,
+                lockedUntil: record.lockedUntil,
+                remainingMs
+            });
+        }
+
+        // ── Buscar usuario ──
         let user;
         if (type === 'practicant') {
             user = await User.findOne({ where: { dni } });
@@ -15,18 +78,33 @@ const login = async (req, res) => {
         }
 
         if (!user) {
-            return res.status(404).json({ message: 'Usuario no encontrado' });
+            // Contar intento aunque el usuario no exista (evita enumeración)
+            const updated = registerFailedAttempt(lockKey);
+            const remaining = MAX_ATTEMPTS - updated.attempts;
+            const msg = updated.lockedUntil
+                ? `Cuenta bloqueada por 15 minutos tras ${MAX_ATTEMPTS} intentos fallidos.`
+                : `Usuario no encontrado. Intentos restantes: ${remaining}.`;
+            return res.status(404).json({ message: msg, locked: !!updated.lockedUntil, attemptsRemaining: remaining });
         }
 
-        // For demo purposes, if password is plain text (initial seed) or hashed
-        // We should check both or assume hashed.
-        // Let's assume seeded users might have plain text in this prototype phase if not careful, 
-        // but better to always hash.
-        // For now, simple compare:
+        // ── Verificar contraseña ──
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
-            return res.status(400).json({ message: 'Contraseña incorrecta' });
+            const updated   = registerFailedAttempt(lockKey);
+            const remaining = Math.max(0, MAX_ATTEMPTS - updated.attempts);
+            const msg = updated.lockedUntil
+                ? `Cuenta bloqueada por 15 minutos tras ${MAX_ATTEMPTS} intentos fallidos consecutivos.`
+                : `Contraseña incorrecta. Intentos restantes: ${remaining}.`;
+            return res.status(400).json({
+                message: msg,
+                locked: !!updated.lockedUntil,
+                lockedUntil: updated.lockedUntil || null,
+                attemptsRemaining: remaining
+            });
         }
+
+        // ── Login exitoso: limpiar intentos y emitir token ──
+        clearAttempts(lockKey);
 
         const token = jwt.sign(
             { id: user.id, role: user.role },
@@ -67,6 +145,9 @@ const forgotPassword = async (req, res) => {
 
         // Update user
         await user.update({ password: hashedPassword });
+
+        // Limpiar intentos fallidos al restablecer contraseña
+        clearAttempts(`practicant:${dni}`);
 
         res.json({ message: `Su contraseña ha sido restablecida exitosamente. Su nueva contraseña es su ${user.role === 'ADMIN' ? 'Usuario (' + newPassword + ')' : 'DNI (' + newPassword + ')'}. Ya puede iniciar sesión.` });
 
