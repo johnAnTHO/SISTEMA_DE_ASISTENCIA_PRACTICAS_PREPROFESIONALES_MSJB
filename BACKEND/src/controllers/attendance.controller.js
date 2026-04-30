@@ -251,4 +251,158 @@ const getGlobalStats = async (req, res) => {
     }
 };
 
-module.exports = { registerForDni, getTodayStatus, getUserHistory, getTodayAttendance, getGlobalStats };
+// Exportar historial completo de un practicante según su periodo de prácticas
+const exportPracticantReport = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        // 1. Obtener datos del practicante
+        const user = await User.findOne({
+            where: { id: userId },
+            attributes: ['id', 'names', 'lastnames', 'dni', 'area', 'shift', 'university', 'career', 'startDate', 'endDate']
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'Practicante no encontrado.' });
+        }
+
+        if (!user.startDate || !user.endDate) {
+            return res.status(400).json({ message: 'El practicante no tiene fechas de inicio o fin de prácticas registradas.' });
+        }
+
+        // 2. Consultar asistencia dentro del rango startDate - endDate
+        const attendances = await Attendance.findAll({
+            where: {
+                userId: user.id,
+                date: {
+                    [Op.between]: [user.startDate, user.endDate]
+                }
+            },
+            order: [['date', 'ASC']]
+        });
+
+        // 3. Calcular días laborables en el rango (lunes a viernes)
+        let laborableDays = 0;
+        const start = new Date(user.startDate);
+        const end = new Date(user.endDate);
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            const dow = d.getDay();
+            if (dow !== 0 && dow !== 6) laborableDays++;
+        }
+
+        // 4. Calcular resumen
+        const totalDiasAsistidos = attendances.length;
+        const totalTardanzas = attendances.filter(a => a.status === 'TARDANZA').length;
+        const totalPuntuales = attendances.filter(a => a.status === 'PUNTUAL').length;
+        const totalHoras = attendances.reduce((acc, a) => acc + (a.hours || 0), 0);
+        const diasAusentes = Math.max(0, laborableDays - totalDiasAsistidos);
+        const porcentajeCumplimiento = laborableDays > 0
+            ? Math.round((totalDiasAsistidos / laborableDays) * 100)
+            : 0;
+
+        res.json({
+            practicant: {
+                names: user.names,
+                lastnames: user.lastnames,
+                dni: user.dni,
+                area: user.area,
+                shift: user.shift,
+                university: user.university || '',
+                career: user.career || '',
+                startDate: user.startDate,
+                endDate: user.endDate
+            },
+            summary: {
+                laborableDays,
+                totalDiasAsistidos,
+                totalPuntuales,
+                totalTardanzas,
+                diasAusentes,
+                totalHoras: parseFloat(totalHoras.toFixed(2)),
+                porcentajeCumplimiento
+            },
+            records: attendances.map(a => ({
+                date: a.date,
+                entryTime: a.entryTime,
+                exitTime: a.exitTime || '--:--',
+                hours: a.hours || 0,
+                status: a.status
+            }))
+        });
+    } catch (error) {
+        console.error('Error en exportPracticantReport:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// Resumen de todos los practicantes en su periodo de prácticas (para Control de Asistencia)
+const getPeriodSummaryAll = async (req, res) => {
+    try {
+        // Traer todos los practicantes
+        const practicants = await User.findAll({
+            where: { role: 'PRACTICANT' },
+            attributes: ['id', 'names', 'lastnames', 'dni', 'area', 'shift', 'university', 'career', 'startDate', 'endDate', 'status']
+        });
+
+        const results = await Promise.all(practicants.map(async (p) => {
+            const base = {
+                id: p.id,
+                names: p.names,
+                lastnames: p.lastnames,
+                dni: p.dni,
+                area: p.area,
+                shift: p.shift,
+                startDate: p.startDate,
+                endDate: p.endDate,
+                status: p.status
+            };
+
+            if (!p.startDate || !p.endDate) {
+                return { ...base, laborableDays: null, totalAsistidos: 0, totalPuntuales: 0, totalTardanzas: 0, diasAusentes: null, porcentaje: null, sinFechas: true };
+            }
+
+            // Contar días laborables
+            let laborableDays = 0;
+            const start = new Date(p.startDate);
+            const end   = new Date(p.endDate);
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                const dow = d.getDay();
+                if (dow !== 0 && dow !== 6) laborableDays++;
+            }
+
+            // Contar asistencias en el periodo
+            const attendances = await Attendance.findAll({
+                where: {
+                    userId: p.id,
+                    date: { [Op.between]: [p.startDate, p.endDate] }
+                }
+            });
+
+            const totalAsistidos  = attendances.length;
+            const totalTardanzas  = attendances.filter(a => a.status === 'TARDANZA').length;
+            const totalPuntuales  = attendances.filter(a => a.status === 'PUNTUAL').length;
+            const totalHoras      = attendances.reduce((acc, a) => acc + (a.hours || 0), 0);
+            const diasAusentes    = Math.max(0, laborableDays - totalAsistidos);
+            const porcentaje      = laborableDays > 0 ? Math.round((totalAsistidos / laborableDays) * 100) : 0;
+
+            return {
+                ...base,
+                laborableDays,
+                totalAsistidos,
+                totalPuntuales,
+                totalTardanzas,
+                totalHoras: parseFloat(totalHoras.toFixed(2)),
+                diasAusentes,
+                porcentaje,
+                sinFechas: false
+            };
+        }));
+
+        res.json(results);
+    } catch (error) {
+        console.error('Error en getPeriodSummaryAll:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { registerForDni, getTodayStatus, getUserHistory, getTodayAttendance, getGlobalStats, exportPracticantReport, getPeriodSummaryAll };

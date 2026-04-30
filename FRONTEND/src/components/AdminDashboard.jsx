@@ -141,7 +141,7 @@ const AdminDashboard = ({ user, onLogout }) => {
                         </li>
                         <li className="nav-item">
                             <a href="#" className={`nav-link ${activeView === 'attendance' ? 'active' : ''}`} onClick={() => setActiveView('attendance')}>
-                                <ClipboardCheck /> <span>Control de Asistencia</span>
+                                <ClipboardCheck /> <span>Asistencia por Periodo</span>
                             </a>
                         </li>
                         <li className="nav-item">
@@ -236,7 +236,7 @@ const DashboardHome = ({ onViewChange, practicants, setAreaFilter }) => {
                         <div className="admin-card-icon icon-control"><ClipboardCheck /></div>
                         <div>
                             <h3>Asistencia</h3>
-                            <p>{stats.present} Hoy</p>
+                            <p>Por periodo de prácticas</p>
                         </div>
                     </div>
                 </div>
@@ -346,6 +346,89 @@ const PracticantsManagement = ({ practicants, onRefresh }) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
+    // ──────────────────────────────────────────────
+    //  Exportar reporte completo de un practicante
+    // ──────────────────────────────────────────────
+    const [exportingId, setExportingId] = useState(null);
+
+    const handleExportPracticant = async (p) => {
+        if (!p.startDate || !p.endDate) {
+            alert(`El practicante ${p.names} ${p.lastnames} no tiene fechas de inicio o fin de prácticas registradas. Edítalo primero.`);
+            return;
+        }
+
+        setExportingId(p.id);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(
+                `http://localhost:3000/api/attendance/export/${p.id}`,
+                { headers: { 'x-access-token': token } }
+            );
+
+            const { practicant, summary, records } = response.data;
+            const fullName = `${practicant.names} ${practicant.lastnames}`;
+
+            // ── Construir CSV ──
+            const rows = [];
+
+            // Encabezado del reporte
+            rows.push(`REPORTE DE ASISTENCIA - PERIODO DE PRÁCTICAS`);
+            rows.push(`Municipalidad Distrital de San Juan Bautista`);
+            rows.push(``);
+            rows.push(`DATOS DEL PRACTICANTE`);
+            rows.push(`Nombre Completo;${fullName}`);
+            rows.push(`DNI;${practicant.dni}`);
+            rows.push(`Área;${practicant.area}`);
+            rows.push(`Turno;${practicant.shift}`);
+            rows.push(`Universidad;${practicant.university || 'No especificada'}`);
+            rows.push(`Carrera;${practicant.career || 'No especificada'}`);
+            rows.push(`Fecha de Inicio de Prácticas;${practicant.startDate}`);
+            rows.push(`Fecha de Fin de Prácticas;${practicant.endDate}`);
+            rows.push(``);
+            rows.push(`RESUMEN DEL PERIODO`);
+            rows.push(`Días Laborables en el Periodo;${summary.laborableDays}`);
+            rows.push(`Días Asistidos;${summary.totalDiasAsistidos}`);
+            rows.push(`Días Puntuales;${summary.totalPuntuales}`);
+            rows.push(`Días con Tardanza;${summary.totalTardanzas}`);
+            rows.push(`Días Ausentes / Sin Registro;${summary.diasAusentes}`);
+            rows.push(`Total Horas Trabajadas;${summary.totalHoras} hrs`);
+            rows.push(`Porcentaje de Cumplimiento;${summary.porcentajeCumplimiento}%`);
+            rows.push(`Resultado;${summary.porcentajeCumplimiento >= 80 ? 'CUMPLIÓ CON LAS PRÁCTICAS' : 'NO CUMPLIÓ CON LAS PRÁCTICAS'}`);
+            rows.push(``);
+            rows.push(`DETALLE POR DÍA`);
+            rows.push(`Fecha;Entrada;Salida;Horas;Estado`);
+
+            if (records.length === 0) {
+                rows.push(`Sin registros de asistencia en el periodo;;;;`);
+            } else {
+                records.forEach(r => {
+                    rows.push(`${r.date};${r.entryTime};${r.exitTime};${r.hours};${r.status}`);
+                });
+            }
+
+            rows.push(``);
+            rows.push(`Reporte generado el,${new Date().toLocaleDateString('es-PE')} ${new Date().toLocaleTimeString('es-PE')}`);
+
+            // ── Descargar ──
+            const BOM = '\uFEFF'; // Para que Excel abra bien con tildes
+            const csvContent = BOM + rows.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `reporte_${practicant.dni}_${practicant.startDate}_${practicant.endDate}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+        } catch (error) {
+            alert('Error al exportar: ' + (error.response?.data?.message || error.message));
+        } finally {
+            setExportingId(null);
+        }
+    };
+
     return (
         <>
             <div className="content-header">
@@ -360,6 +443,7 @@ const PracticantsManagement = ({ practicants, onRefresh }) => {
                             <th>Nombres y Apellidos</th>
                             <th>Área</th>
                             <th>Turno</th>
+                            <th>Periodo de Prácticas</th>
                             <th>Estado</th>
                             <th>Acciones</th>
                         </tr>
@@ -376,10 +460,25 @@ const PracticantsManagement = ({ practicants, onRefresh }) => {
                                 </td>
                                 <td>{p.area}</td>
                                 <td>{p.shift}</td>
+                                <td style={{ fontSize: '0.8rem', color: '#555' }}>
+                                    {p.startDate && p.endDate
+                                        ? <span>{p.startDate} → {p.endDate}</span>
+                                        : <span style={{ color: '#bbb', fontStyle: 'italic' }}>Sin fechas</span>
+                                    }
+                                </td>
                                 <td><span className={`status-badge ${p.status === 'Activo' ? 'present' : 'absent'}`}>{p.status || 'Activo'}</span></td>
                                 <td className="action-buttons">
                                     <button className="btn-sm btn-primary" title="Ver Perfil Completo" onClick={() => { setViewingUser(p); setIsViewModalOpen(true); }}><Eye size={16} /></button>
                                     <button className="btn-sm btn-warning" title="Editar" onClick={() => openModal(p)}><Edit size={16} /></button>
+                                    <button
+                                        className="btn-sm btn-success"
+                                        title={p.startDate && p.endDate ? 'Exportar Reporte de Prácticas (CSV)' : 'Sin fechas de práctica — edítalo primero'}
+                                        onClick={() => handleExportPracticant(p)}
+                                        disabled={exportingId === p.id}
+                                        style={{ opacity: (!p.startDate || !p.endDate) ? 0.4 : 1 }}
+                                    >
+                                        {exportingId === p.id ? '...' : <Download size={16} />}
+                                    </button>
                                     <button className="btn-sm btn-danger" title="Eliminar" onClick={() => handleDelete(p.id)}><Trash2 size={16} /></button>
                                 </td>
                             </tr>
@@ -542,126 +641,191 @@ const PracticantsManagement = ({ practicants, onRefresh }) => {
 };
 
 const AttendanceControl = ({ areaFilter, setAreaFilter }) => {
-    const [attendanceData, setAttendanceData] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [summaryData, setSummaryData] = useState([]);
+    const [loading, setLoading]         = useState(true);
+    const [searchText, setSearchText]   = useState('');
 
-    const fetchTodayAttendance = async () => {
+    const fetchPeriodSummary = async () => {
         try {
             setLoading(true);
-            const response = await axios.get('http://localhost:3000/api/attendance/today');
-            setAttendanceData(response.data);
+            const token = localStorage.getItem('token');
+            const response = await axios.get('http://localhost:3000/api/attendance/period-summary', {
+                headers: { 'x-access-token': token }
+            });
+            setSummaryData(response.data);
         } catch (error) {
-            console.error("Error fetching today's attendance:", error);
+            console.error('Error fetching period summary:', error);
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchTodayAttendance();
-    }, []);
+    useEffect(() => { fetchPeriodSummary(); }, []);
 
-    // Filter Logic
-    const filteredData = areaFilter
-        ? attendanceData.filter(record => record.user?.area === areaFilter)
-        : attendanceData;
+    // Filtros combinados: área + búsqueda por nombre/DNI
+    const filteredData = summaryData.filter(p => {
+        const matchArea   = areaFilter ? p.area === areaFilter : true;
+        const q           = searchText.toLowerCase();
+        const matchSearch = q
+            ? `${p.names} ${p.lastnames} ${p.dni}`.toLowerCase().includes(q)
+            : true;
+        return matchArea && matchSearch;
+    });
 
-    const exportToCSV = () => {
-        // Headers
-        const headers = ["Nombre,Area,Entrada,Salida,Horas,Estado"];
+    // Totales del pie de tabla
+    const totals = filteredData.reduce((acc, p) => ({
+        asistidos:  acc.asistidos  + (p.totalAsistidos  || 0),
+        tardanzas:  acc.tardanzas  + (p.totalTardanzas  || 0),
+        ausentes:   acc.ausentes   + (p.diasAusentes    || 0),
+        horas:      acc.horas      + (p.totalHoras      || 0),
+    }), { asistidos: 0, tardanzas: 0, ausentes: 0, horas: 0 });
 
-        // Data rows - Use Filtered Data
-        const rows = filteredData.map(row =>
-            `${row.user?.names} ${row.user?.lastnames},${row.user?.area},${row.entryTime},${row.exitTime || '--:--'},${row.hours || '0'},${row.status}`
-        );
-
-        const csvContent = "data:text/csv;charset=utf-8," + [headers.join("\n"), ...rows].join("\n");
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `asistencia_${areaFilter || 'todos'}_${new Date().toISOString().split('T')[0]}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    const getBadgeClass = (pct) => {
+        if (pct === null) return 'absent';
+        if (pct >= 80) return 'present';
+        if (pct >= 50) return 'late';
+        return 'absent';
     };
 
     return (
         <>
             <div className="content-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                    <h1 className="content-title">Control de Asistencia Hoy</h1>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+                    <h1 className="content-title">Control de Asistencia — Periodo de Prácticas</h1>
                     {areaFilter && (
                         <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            background: 'white',
-                            padding: '4px 12px',
-                            borderRadius: '20px',
-                            border: '1px solid var(--primary)',
-                            boxShadow: '0 2px 5px rgba(0,0,0,0.05)'
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            background: 'white', padding: '4px 12px', borderRadius: '20px',
+                            border: '1px solid var(--primary)', boxShadow: '0 2px 5px rgba(0,0,0,0.05)'
                         }}>
                             <span style={{ fontSize: '0.8rem', color: '#666' }}>Área:</span>
                             <span style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--primary)' }}>{areaFilter}</span>
-                            <X
-                                size={14}
-                                style={{ cursor: 'pointer', color: 'var(--danger)', marginLeft: '5px' }}
-                                onClick={() => setAreaFilter(null)}
-                            />
+                            <X size={14} style={{ cursor: 'pointer', color: 'var(--danger)', marginLeft: '5px' }} onClick={() => setAreaFilter(null)} />
                         </div>
                     )}
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                    <button className="btn btn-primary" onClick={fetchTodayAttendance}><Search size={16} /> Actualizar</button>
-                    <button className="btn btn-success" onClick={exportToCSV}><Download size={16} /> Exportar Excel (CSV)</button>
+                    <button className="btn btn-primary" onClick={fetchPeriodSummary}>
+                        <Search size={16} /> Actualizar
+                    </button>
                 </div>
+            </div>
+
+            {/* Buscador */}
+            <div style={{ marginBottom: '15px' }}>
+                <input
+                    type="text"
+                    className="form-control"
+                    placeholder="🔍 Buscar por nombre o DNI..."
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                    style={{ maxWidth: '350px', padding: '8px 14px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '0.9rem' }}
+                />
+            </div>
+
+            {/* Leyenda */}
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '15px', flexWrap: 'wrap' }}>
+                {[
+                    { color: '#d4edda', border: '#28a745', text: '≥ 80% — Cumple' },
+                    { color: '#fff3cd', border: '#ffc107', text: '50–79% — En riesgo' },
+                    { color: '#f8d7da', border: '#dc3545', text: '< 50% — No cumple' },
+                ].map((item, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#555' }}>
+                        <div style={{ width: '14px', height: '14px', borderRadius: '3px', background: item.color, border: `1px solid ${item.border}` }} />
+                        {item.text}
+                    </div>
+                ))}
             </div>
 
             <div className="table-container">
                 {loading ? (
-                    <div style={{ textAlign: 'center', padding: '50px' }}>Cargando asistencia...</div>
+                    <div style={{ textAlign: 'center', padding: '50px', color: '#666' }}>
+                        <div className="loader" style={{ marginBottom: '15px' }}></div>
+                        Calculando resumen de prácticas...
+                    </div>
                 ) : (
                     <table>
                         <thead>
                             <tr>
+                                <th>DNI</th>
                                 <th>Nombre y Apellidos</th>
                                 <th>Área</th>
-                                <th>Entrada</th>
-                                <th>Salida</th>
-                                <th>Horas</th>
-                                <th>Estado</th>
+                                <th>Turno</th>
+                                <th>Periodo</th>
+                                <th style={{ textAlign: 'center' }}>Días Lab.</th>
+                                <th style={{ textAlign: 'center' }}>Asistidos</th>
+                                <th style={{ textAlign: 'center' }}>Puntuales</th>
+                                <th style={{ textAlign: 'center' }}>Tardanzas</th>
+                                <th style={{ textAlign: 'center' }}>Ausentes</th>
+                                <th style={{ textAlign: 'center' }}>Horas</th>
+                                <th style={{ textAlign: 'center' }}>Cumplimiento</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredData.length > 0 ? (
-                                filteredData.map(row => (
-                                    <tr key={row.id}>
-                                        <td style={{ fontWeight: '500' }}>{row.user?.names} {row.user?.lastnames}</td>
-                                        <td>{row.user?.area}</td>
-                                        <td style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{row.entryTime}</td>
-                                        <td style={{ color: row.exitTime ? 'var(--secondary)' : '#999' }}>{row.exitTime || '--:--'}</td>
-                                        <td>{row.hours || '0'} hrs</td>
-                                        <td>
-                                            <span className={`status-badge ${row.status === 'PUNTUAL' ? 'present' : 'late'}`}>
-                                                {row.status}
-                                            </span>
+                            {filteredData.length > 0 ? filteredData.map(p => {
+                                const rowClass = p.sinFechas ? 'row-sin-fechas'
+                                    : p.porcentaje >= 80 ? 'row-present'
+                                    : p.porcentaje >= 50 ? 'row-late'
+                                    : 'row-absent';
+                                return (
+                                    <tr key={p.id} className={rowClass}>
+                                        <td style={{ fontSize: '0.85rem' }}>{p.dni}</td>
+                                        <td style={{ fontWeight: '600', color: 'var(--primary)' }}>{p.names} {p.lastnames}</td>
+                                        <td style={{ fontSize: '0.82rem' }}>{p.area}</td>
+                                        <td>{p.shift}</td>
+                                        <td style={{ fontSize: '0.78rem', color: '#555' }}>
+                                            {p.sinFechas
+                                                ? <span style={{ color: '#bbb', fontStyle: 'italic' }}>Sin fechas</span>
+                                                : <span>{p.startDate} → {p.endDate}</span>
+                                            }
+                                        </td>
+                                        <td style={{ textAlign: 'center', fontWeight: '600' }}>{p.laborableDays ?? '—'}</td>
+                                        <td style={{ textAlign: 'center', color: 'var(--secondary)', fontWeight: '700' }}>{p.totalAsistidos}</td>
+                                        <td style={{ textAlign: 'center', color: '#28a745' }}>{p.totalPuntuales}</td>
+                                        <td style={{ textAlign: 'center', color: p.totalTardanzas > 0 ? '#e67e22' : '#999' }}>{p.totalTardanzas}</td>
+                                        <td style={{ textAlign: 'center', color: p.diasAusentes > 0 ? '#dc3545' : '#999' }}>{p.diasAusentes ?? '—'}</td>
+                                        <td style={{ textAlign: 'center' }}>{p.totalHoras != null ? `${p.totalHoras} h` : '—'}</td>
+                                        <td style={{ textAlign: 'center' }}>
+                                            {p.sinFechas ? (
+                                                <span className="status-badge absent" style={{ fontSize: '0.7rem' }}>Sin periodo</span>
+                                            ) : (
+                                                <span className={`status-badge ${getBadgeClass(p.porcentaje)}`}>
+                                                    {p.porcentaje}%
+                                                </span>
+                                            )}
                                         </td>
                                     </tr>
-                                ))
-                            ) : (
+                                );
+                            }) : (
                                 <tr>
-                                    <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#666' }}>
-                                        No hay marcaciones de asistencia registradas para hoy.
+                                    <td colSpan="12" style={{ textAlign: 'center', padding: '30px', color: '#666' }}>
+                                        No se encontraron practicantes con los filtros aplicados.
                                     </td>
                                 </tr>
                             )}
                         </tbody>
+                        {filteredData.length > 0 && (
+                            <tfoot>
+                                <tr style={{ background: '#f0f4f8', fontWeight: '700', borderTop: '2px solid #dee2e6' }}>
+                                    <td colSpan="6" style={{ textAlign: 'right', paddingRight: '15px', color: '#333' }}>
+                                        TOTALES ({filteredData.length} practicantes):
+                                    </td>
+                                    <td style={{ textAlign: 'center', color: 'var(--secondary)' }}>{totals.asistidos}</td>
+                                    <td style={{ textAlign: 'center' }}>—</td>
+                                    <td style={{ textAlign: 'center', color: '#e67e22' }}>{totals.tardanzas}</td>
+                                    <td style={{ textAlign: 'center', color: '#dc3545' }}>{totals.ausentes}</td>
+                                    <td style={{ textAlign: 'center' }}>{totals.horas.toFixed(1)} h</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        )}
                     </table>
                 )}
             </div>
         </>
     );
 };
+
 
 const ReportsView = () => {
     const [stats, setStats] = useState(null);
