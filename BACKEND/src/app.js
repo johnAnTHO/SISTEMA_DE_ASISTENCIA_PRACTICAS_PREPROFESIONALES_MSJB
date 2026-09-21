@@ -14,7 +14,7 @@ db.sequelize.sync({ alter: true }).then(() => {
   console.log("Failed to sync db: " + err.message);
 });
 
-app.get('/', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.send('Attendance System API Running');
 });
 

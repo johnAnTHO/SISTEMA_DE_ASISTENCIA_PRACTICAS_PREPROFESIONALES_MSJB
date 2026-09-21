@@ -3,7 +3,7 @@ require('dotenv').config();
 
 // Fallback if env var fails to load, matching the hardcoded string I tried to use
 // Fallback if env var fails to load, matching the hardcoded string I tried to use
-const sequelize = new Sequelize("postgresql://postgres:BD2025jhon@localhost:5432/asistencia_db", {
+const sequelize = new Sequelize(process.env.DATABASE_URL || "postgresql://postgres:BD2025jhon@localhost:5432/asistencia_db", {
     dialect: 'postgres',
     logging: false,
 });

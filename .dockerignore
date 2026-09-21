@@ -1,0 +1,11 @@
+node_modules
+BACKEND/node_modules
+FRONTEND/node_modules
+FRONTEND/dist
+.git
+.env
+Dockerfile
+docker-compose.yml
+README.md
+GUIA_DESPLIEGUE.md
+MANUAL_ACCESO.md

@@ -5,6 +5,7 @@ import { Sun, Moon } from 'lucide-react';
 import Login from './components/Login';
 import PracticantDashboard from './components/PracticantDashboard';
 import AdminDashboard from './components/AdminDashboard';
+import Presentation from './components/Presentation';
 import axios from 'axios';
 
 // Configurar interceptor global para incluir el token en todas las peticiones
@@ -46,6 +47,7 @@ function App() {
         {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
       </button>
       <Routes>
+        <Route path="/presentacion" element={<Presentation />} />
         <Route path="/terminal" element={<AttendanceTerminal />} />
         <Route path="/login" element={<Login setUser={setUser} />} />
         <Route

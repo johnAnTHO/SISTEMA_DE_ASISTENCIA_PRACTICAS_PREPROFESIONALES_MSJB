@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { User, Lock, UserCheck, Shield, AlertTriangle, Clock } from 'lucide-react';
+import { User, Lock, UserCheck, Shield, AlertTriangle, Clock, Layers } from 'lucide-react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
@@ -325,26 +325,49 @@ const Login = ({ setUser }) => {
 
                 <div className="terminal-link-container" style={{ marginTop: '20px', textAlign: 'center', borderTop: '1px solid #eee', paddingTop: '15px' }}>
                     <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '10px' }}>¿Desea marcar asistencia sin iniciar sesión?</p>
-                    <button
-                        onClick={() => navigate('/terminal')}
-                        className="btn-terminal"
-                        style={{
-                            background: 'transparent',
-                            border: '2px solid #3f51b5',
-                            color: '#3f51b5',
-                            padding: '8px 15px',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontSize: '0.9rem',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            fontWeight: '600',
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <Shield size={16} /> Ir a Terminal de Asistencia
-                    </button>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center' }}>
+                        <button
+                            onClick={() => navigate('/terminal')}
+                            className="btn-terminal"
+                            style={{
+                                background: 'transparent',
+                                border: '2px solid #3f51b5',
+                                color: '#3f51b5',
+                                padding: '8px 15px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontSize: '0.9rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                fontWeight: '600',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <Shield size={16} /> Terminal de Asistencia
+                        </button>
+                        <button
+                            onClick={() => navigate('/presentacion')}
+                            className="btn-presentation-link"
+                            style={{
+                                background: 'linear-gradient(135deg, #4f46e5, #3b82f6)',
+                                border: 'none',
+                                color: 'white',
+                                padding: '8px 15px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontSize: '0.9rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                fontWeight: '600',
+                                transition: 'all 0.2s',
+                                boxShadow: '0 4px 6px rgba(59, 130, 246, 0.2)'
+                            }}
+                        >
+                            <Layers size={16} /> Ver Diapositivas
+                        </button>
+                    </div>
                 </div>
             </div>
 
